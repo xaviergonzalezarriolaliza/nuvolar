@@ -22,16 +22,10 @@ async function run() {
   // Enable verbose chromedriver service logging and set logging preferences
   const logPath = path.join(process.cwd(), 'chromedriver.log');
 
-  // Spawn chromedriver ourselves with verbose logging so we can capture stdout/stderr
-  const cdArgs = [`--port=9515`, `--verbose`, `--log-path=${logPath}`];
-  const cdProc = spawn(chromedriver.path, cdArgs, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  cdProc.stdout.on('data', (d) => process.stdout.write(`[chromedriver stdout] ${d}`));
-  cdProc.stderr.on('data', (d) => process.stderr.write(`[chromedriver stderr] ${d}`));
-
-  function waitForStatus(url = 'http://127.0.0.1:9515/status', timeout = 15000) {
+  // Spawn chromedriver ourselves with verbose logging when running locally.
+  // In CI we prefer to let Selenium Manager or the runner provide the browser driver.
+  let cdProc: ChildProcessWithoutNullStreams | null = null;
+  async function waitForStatus(url = 'http://127.0.0.1:9515/status', timeout = 15000) {
     const start = Date.now();
     return new Promise<void>((resolve, reject) => {
       (function poll() {
@@ -45,6 +39,18 @@ async function run() {
         });
       })();
     });
+  }
+
+  if (!isCI) {
+    const cdArgs = [`--port=9515`, `--verbose`, `--log-path=${logPath}`];
+    cdProc = spawn(chromedriver.path, cdArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    cdProc.stdout.on('data', (d) => process.stdout.write(`[chromedriver stdout] ${d}`));
+    cdProc.stderr.on('data', (d) => process.stderr.write(`[chromedriver stderr] ${d}`));
+  } else {
+    console.log('CI detected: not spawning chromedriver, using Selenium Manager / runner-provided driver');
   }
 
   // Build logging preferences (browser + driver)
@@ -64,21 +70,24 @@ async function run() {
     success: false,
   };
 
-  try {
-    await waitForStatus();
-    console.log('chromedriver is ready on port 9515');
-  } catch (e) {
-    console.error('chromedriver did not start in time:', (e as any)?.message || e);
-    cdProc.kill();
-    throw e;
+  if (cdProc) {
+    try {
+      await waitForStatus();
+      console.log('chromedriver is ready on port 9515');
+    } catch (e) {
+      console.error('chromedriver did not start in time:', (e as any)?.message || e);
+      try {
+        cdProc.kill();
+      } catch {}
+      throw e;
+    }
   }
 
-  const driver = await new Builder()
-    .usingServer('http://127.0.0.1:9515')
-    .forBrowser('chrome')
-    .setChromeOptions(options)
-    .setLoggingPrefs(prefs as any)
-    .build();
+  // When running in CI, do not point to a local chromedriver server; let Selenium Manager
+  // or the runner provide the driver. Locally we connect to the spawned chromedriver.
+  const builder = new Builder().forBrowser('chrome').setChromeOptions(options).setLoggingPrefs(prefs as any);
+  if (cdProc) builder.usingServer('http://127.0.0.1:9515');
+  const driver = await builder.build();
 
   try {
     const startTs = Date.now();
@@ -128,21 +137,25 @@ async function run() {
   } finally {
     await driver.quit();
 
-    // Kill chromedriver process
-    try {
-      cdProc.kill();
-    } catch (e) {
-      /* ignore */
-    }
+    // Kill chromedriver process if we spawned one
+    if (cdProc) {
+      try {
+        cdProc.kill();
+      } catch (e) {
+        /* ignore */
+      }
 
-    // Attempt to read chromedriver log and print last portion for debugging
-    try {
-      const data = await fs.readFile(logPath, 'utf8');
-      console.log('--- chromedriver.log (last 2000 chars) ---');
-      console.log(data.slice(-2000));
-      report.chromedriverLogTail = data.slice(-2000);
-    } catch (e: any) {
-      console.warn('Could not read chromedriver log:', e?.message || e);
+      // Attempt to read chromedriver log and print last portion for debugging
+      try {
+        const data = await fs.readFile(logPath, 'utf8');
+        console.log('--- chromedriver.log (last 2000 chars) ---');
+        console.log(data.slice(-2000));
+        report.chromedriverLogTail = data.slice(-2000);
+      } catch (e: any) {
+        console.warn('Could not read chromedriver log:', e?.message || e);
+      }
+    } else {
+      report.chromedriverLogTail = '';
     }
 
     // Ensure reports directory and write an HTML report
