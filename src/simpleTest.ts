@@ -52,6 +52,10 @@ async function run() {
   prefs.setLevel(logging.Type.BROWSER, logging.Level.ALL);
   prefs.setLevel(logging.Type.DRIVER, logging.Level.ALL);
 
+  function escapeHtml(s: string) {
+    return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+  }
+
   // Pass logging prefs via capabilities so driver emits detailed logs
   // Wait for chromedriver to be ready, then point WebDriver to it
   // Simple report object
@@ -141,15 +145,39 @@ async function run() {
       console.warn('Could not read chromedriver log:', e?.message || e);
     }
 
-    // Ensure reports directory and write a simple JSON report
+    // Ensure reports directory and write an HTML report
     try {
       const reportsDir = path.join(process.cwd(), 'reports');
       await fs.mkdir(reportsDir, { recursive: true });
-      const reportPath = path.join(reportsDir, `report-${Date.now()}.json`);
-      await fs.writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
-      console.log('Wrote test report to', reportPath);
+      const reportPath = path.join(reportsDir, `report-${Date.now()}.html`);
+
+      const screenshotRel = report.screenshot ? path.relative(reportsDir, report.screenshot).replace(/\\/g, '/') : '';
+      const cdLogHtml = report.chromedriverLogTail ? `<pre>${escapeHtml(report.chromedriverLogTail)}</pre>` : '';
+
+      const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Selenium Test Report</title>
+    <style>body{font-family:Arial,Helvetica,sans-serif} pre{background:#f4f4f4;padding:10px;overflow:auto;max-height:400px}</style>
+  </head>
+  <body>
+    <h1>Selenium Test Report</h1>
+    <p><strong>Start:</strong> ${escapeHtml(report.startTime)}</p>
+    <p><strong>Success:</strong> ${report.success}</p>
+    <p><strong>Title:</strong> ${escapeHtml(report.title || '')}</p>
+    <p><strong>Duration (ms):</strong> ${report.durationMs || ''}</p>
+    ${screenshotRel ? `<h2>Screenshot</h2><img src="${escapeHtml(screenshotRel)}" style="max-width:100%"/>` : ''}
+    <h2>ChromeDriver Log (tail)</h2>
+    ${cdLogHtml}
+    ${report.error ? `<h2>Error</h2><pre>${escapeHtml(report.error)}</pre>` : ''}
+  </body>
+</html>`;
+
+      await fs.writeFile(reportPath, html, 'utf8');
+      console.log('Wrote HTML test report to', reportPath);
     } catch (e: any) {
-      console.warn('Failed to write test report:', e?.message || e);
+      console.warn('Failed to write HTML test report:', e?.message || e);
     }
   }
 }
