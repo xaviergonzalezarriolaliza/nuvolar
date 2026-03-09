@@ -41,7 +41,9 @@ async function run() {
     });
   }
 
-  if (!isCI) {
+  // Try spawning chromedriver from the installed `chromedriver` package.
+  // If that fails (binary not present), we'll fall back to Selenium Manager / runner-provided driver.
+  try {
     const cdArgs = [`--port=9515`, `--verbose`, `--log-path=${logPath}`];
     cdProc = spawn(chromedriver.path, cdArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -49,8 +51,11 @@ async function run() {
 
     cdProc.stdout.on('data', (d) => process.stdout.write(`[chromedriver stdout] ${d}`));
     cdProc.stderr.on('data', (d) => process.stderr.write(`[chromedriver stderr] ${d}`));
-  } else {
-    console.log('CI detected: not spawning chromedriver, using Selenium Manager / runner-provided driver');
+    console.log('Spawned chromedriver at', chromedriver.path);
+  } catch (e: any) {
+    console.log('Could not spawn chromedriver binary:', (e as any)?.message || e);
+    cdProc = null;
+    console.log('Falling back to Selenium Manager / runner-provided driver');
   }
 
   // Build logging preferences (browser + driver)
