@@ -54,8 +54,19 @@ async function run() {
     console.log('Spawned chromedriver at', chromedriver.path);
   } catch (e: any) {
     console.log('Could not spawn chromedriver binary:', (e as any)?.message || e);
-    cdProc = null;
-    console.log('Falling back to Selenium Manager / runner-provided driver');
+    // Try system chromedriver location as a fallback (common on CI runners)
+    try {
+      const sysPath = '/usr/bin/chromedriver';
+      const cdArgs2 = [`--port=9515`, `--verbose`, `--log-path=${logPath}`];
+      cdProc = spawn(sysPath, cdArgs2, { stdio: ['pipe', 'pipe', 'pipe'] });
+      cdProc.stdout.on('data', (d) => process.stdout.write(`[chromedriver stdout] ${d}`));
+      cdProc.stderr.on('data', (d) => process.stderr.write(`[chromedriver stderr] ${d}`));
+      console.log('Spawned system chromedriver at', sysPath);
+    } catch (e2: any) {
+      console.log('Could not spawn system chromedriver either:', (e2 as any)?.message || e2);
+      cdProc = null;
+      console.log('Falling back to Selenium Manager / runner-provided driver');
+    }
   }
 
   // Build logging preferences (browser + driver)
