@@ -54,6 +54,12 @@ async function run() {
 
   // Pass logging prefs via capabilities so driver emits detailed logs
   // Wait for chromedriver to be ready, then point WebDriver to it
+  // Simple report object
+  const report: any = {
+    startTime: new Date().toISOString(),
+    success: false,
+  };
+
   try {
     await waitForStatus();
     console.log('chromedriver is ready on port 9515');
@@ -71,6 +77,7 @@ async function run() {
     .build();
 
   try {
+    const startTs = Date.now();
     console.log('Navigating to https://www.google.com');
     await driver.get('https://www.google.com');
     console.log('Navigated, waiting for title');
@@ -88,6 +95,10 @@ async function run() {
       const outFile = path.join(shotsDir, `success-${Date.now()}.png`);
       await fs.writeFile(outFile, Buffer.from(img, 'base64'));
       console.log('Saved success screenshot to', outFile);
+      report.screenshot = outFile;
+      report.title = title;
+      report.success = true;
+      report.durationMs = Date.now() - startTs;
     } catch (sErr) {
       console.warn('Failed to save success screenshot:', (sErr as any)?.message || sErr);
     }
@@ -103,6 +114,9 @@ async function run() {
       const outFile = path.join(shotsDir, `failure-${Date.now()}.png`);
       await fs.writeFile(outFile, Buffer.from(img, 'base64'));
       console.log('Saved failure screenshot to', outFile);
+      report.screenshot = outFile;
+      report.success = false;
+      report.error = (err as any)?.message || String(err);
     } catch (sErr) {
       console.warn('Failed to capture failure screenshot:', (sErr as any)?.message || sErr);
     }
@@ -122,8 +136,20 @@ async function run() {
       const data = await fs.readFile(logPath, 'utf8');
       console.log('--- chromedriver.log (last 2000 chars) ---');
       console.log(data.slice(-2000));
+      report.chromedriverLogTail = data.slice(-2000);
     } catch (e: any) {
       console.warn('Could not read chromedriver log:', e?.message || e);
+    }
+
+    // Ensure reports directory and write a simple JSON report
+    try {
+      const reportsDir = path.join(process.cwd(), 'reports');
+      await fs.mkdir(reportsDir, { recursive: true });
+      const reportPath = path.join(reportsDir, `report-${Date.now()}.json`);
+      await fs.writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
+      console.log('Wrote test report to', reportPath);
+    } catch (e: any) {
+      console.warn('Failed to write test report:', e?.message || e);
     }
   }
 }
