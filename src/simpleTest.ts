@@ -44,7 +44,7 @@ async function run() {
   if (!isCI) {
     const cdArgs = [`--port=9515`, `--verbose`, `--log-path=${logPath}`];
     cdProc = spawn(chromedriver.path, cdArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     cdProc.stdout.on('data', (d) => process.stdout.write(`[chromedriver stdout] ${d}`));
