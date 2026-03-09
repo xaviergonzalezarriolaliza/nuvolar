@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "ts-node src/simpleTest.ts",
+    "start": "npx ts-node src/simpleTest.ts",
     "build": "tsc -p ."
   },
   "dependencies": {
