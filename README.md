@@ -46,7 +46,24 @@ CI notes
 - Push to `main` (or open a PR) to trigger the `Selenium tests` workflow. The workflow runs headless
 	and uploads the generated HTML report and screenshots as artifacts.
 - If the job fails due to a Chrome/Chromedriver mismatch, update Chrome (or pin a matching
-	`chromedriver` version in `package.json` and run `npm install`). See the `scripts/` helpers.
+
+- The repository was recently adjusted to address CI failures seen when the runner did not
+	contain a packaged `chromedriver` binary. Key changes made during troubleshooting:
+	- Start script: the `start` script was changed to run Node and register `ts-node` from
+		JavaScript (avoids executing the `ts-node` binary directly in GitHub Actions which
+		produced a "Permission denied" error on some runners).
+	- Chromedriver spawn: `src/simpleTest.ts` now checks candidate binary paths before
+		attempting to spawn `chromedriver` (checks `chromedriver.path`, `/usr/bin/chromedriver`,
+		`/usr/local/bin/chromedriver`). If no binary is found the test will *not* spawn a local
+		driver and will instead let Selenium Manager or the runner provide the driver. This avoids
+		ENOENT errors when the packaged binary is missing on CI.
+	- Workflow updates: the GitHub Actions workflow was updated during iteration (Node 20 and
+		an optional runner step to install a system `chromium-chromedriver`) so CI can provide a
+		matching driver when needed. If your CI environment lacks a chromedriver binary, prefer
+		installing one on the runner or pinning a compatible `chromedriver` version in `package.json`.
+
+If you want me to make the workflow always install a particular Chrome + chromedriver pair,
+I can add that step (recommended for maximum CI stability).
 
 If you want, I can add a `npm run ci` helper or make the report template fancier.
 
