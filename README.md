@@ -62,8 +62,3 @@ CI notes
 		matching driver when needed. If your CI environment lacks a chromedriver binary, prefer
 		installing one on the runner or pinning a compatible `chromedriver` version in `package.json`.
 
-If you want me to make the workflow always install a particular Chrome + chromedriver pair,
-I can add that step (recommended for maximum CI stability).
-
-If you want, I can add a `npm run ci` helper or make the report template fancier.
-
